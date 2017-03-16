@@ -145,34 +145,15 @@ class SubtractionEncoder:
     output_format = ''
     variable_name = ''
 
-    def __init__(self, argv):
-        parser = argparse.ArgumentParser(description='Encode instructions using the SubtractionEncoder')
+    def __init__(self, inputbytes, goodbytes=None, badbytes=None,
+                    output_format='python', variable_name='var'):
 
-        parser.add_argument('--input',
-                            help='The string of input bytes',
-                            required=True)
-        group = parser.add_mutually_exclusive_group(required=True)
-        group.add_argument('--goodbytes',
-                            help='The string of allowed bytes')
-        group.add_argument('--badbytes',
-                            help='The string of disallowed bytes')
-        parser.add_argument('--variablename',
-                                  help='The name of the variable to output',
-                                  default='var')
-        parser.add_argument('--format',
-                                  help='The output format',
-                                  choices=['asm','raw','python'],
-                                  default='python')
+        self.inbytes = inputbytes
+        self.badbytes = badbytes
+        self.goodbytes = goodbytes
+        self.output_format = output_format
+        self.variable_name = variable_name
 
-        args = parser.parse_args()
-
-        self.inbytes = args.input
-        self.badbytes = args.badbytes
-        self.goodbytes = args.goodbytes
-        self.output_format = args.format
-        self.variable_name = args.variablename
-
-        print args
 
     def process(self):
         if self.goodbytes is not None:
@@ -186,10 +167,34 @@ class SubtractionEncoder:
             if i not in self.badbytes_array:
                 self.goodbytes_array.append(i)
 
+def main():
+    parser = argparse.ArgumentParser(description='Encode instructions using the SubtractionEncoder')
+
+    parser.add_argument('--input',
+                        help='The string of input bytes',
+                        required=True)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--goodbytes',
+                        help='The string of allowed bytes')
+    group.add_argument('--badbytes',
+                        help='The string of disallowed bytes')
+    parser.add_argument('--variablename',
+                              help='The name of the variable to output',
+                              default='var')
+    parser.add_argument('--format',
+                              help='The output format',
+                              choices=['asm','raw','python'],
+                              default='python')
+
+    args = parser.parse_args()
+    print args
+    substraction_encoder = SubtractionEncoder(args.input, args.goodbytes,
+                                            args.badbytes, args.format,
+                                            args.variablename)
+    substraction_encoder.process()
 
 if __name__ == "__main__":
    print 'The encoder of last resort when all others fail...'
    print 'At the moment, this is only for x86 instruction set.'
    print '@kevensen'
-   substraction_encoder = SubtractionEncoder(sys.argv[1:])
-   SubtractionEncoder.process()
+   main()
