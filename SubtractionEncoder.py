@@ -109,6 +109,19 @@ class EncoderParser:
             raise MissingNibbleError(self.input_string)
         return clean_byte_string
 
+    def get_byte_array(self):
+        self.clean()
+        n = 2
+        return [self.input_string[i:i+n] for i in range(0, len(self.input_string), n)]
+
+    def get_inverted_byte_array(self):
+        self.clean()
+        inverted_byte_array = []
+        for i in range(0, 256):
+            if "{:02x}".format(i) not in self.get_byte_array():
+                inverted_byte_array.append("{:02x}".format(i))
+        return inverted_byte_array
+
 class EncoderInputParser(EncoderParser):
 
     def __init__(self, input_string):
@@ -123,7 +136,7 @@ class EncoderInputParser(EncoderParser):
         return self.input_string
 
     # Cleans, pads, and generates a list of EncoderDoubleWord objects
-    def parse(self):
+    def parse_words(self):
         words = []
         clean_byte_string = self.clean()
 
@@ -154,18 +167,33 @@ class SubtractionEncoder:
         self.output_format = output_format
         self.variable_name = variable_name
 
-
     def process(self):
+        # First, let's get an array of good bytes.
         if self.goodbytes is not None:
-            self.goodbytes = EncoderParser(self.goodbytes).clean()
+            self.goodbytes_array = EncoderParser(self.goodbytes).get_byte_array()
         elif self.badbytes is not None:
             self.badbytes = EncoderParser(self.badbytes).clean()
+            self.goodbytes_array = EncoderParser(self.badbytes).get_inverted_byte_array()
 
-    # If bad bytes has been specified, this will create a good byte array
-    def invert_bad_bytes(self):
-        for i in range(0, 255):
-            if i not in self.badbytes_array:
-                self.goodbytes_array.append(i)
+        # Second, we will organize the input to array of EncoderDoubleWord's
+        words = EncoderInputParser(self.inbytes).parse_words()
+
+        for i in range(0,len(words)):
+            print words[i].get_all_digits_base_sixteen(pretty=True)
+
+        print ""
+
+        # Third, we will reverse the array of words since we need to push them
+        # on to the stack in reverse order.
+        words_reverse = words[::-1]
+        for i in range(0,len(words_reverse)):
+            print words_reverse[i].get_all_digits_base_sixteen(pretty=True)
+
+        print ""
+
+        # Now let's take a look at the target bytes
+        for i in range(0,len(words_reverse)):
+            print words_reverse[i].get_subtraction_target().get_all_digits_base_sixteen(pretty=True)
 
 def main():
     parser = argparse.ArgumentParser(description='Encode instructions using the SubtractionEncoder')
@@ -187,7 +215,6 @@ def main():
                               default='python')
 
     args = parser.parse_args()
-    print args
     substraction_encoder = SubtractionEncoder(args.input, args.goodbytes,
                                             args.badbytes, args.format,
                                             args.variablename)
