@@ -92,6 +92,11 @@ class EncoderDoubleWord:
         # would be convenient to use since it has the manipulation methods
         return EncoderDoubleWord(target_answer)
 
+class OperandBuilder:
+
+    def __init__(self, encoder_double_word):
+        self.encoder_double_word = encoder_double_word
+
 class EncoderParser:
 
     def __init__(self, input_string):
