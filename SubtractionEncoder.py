@@ -1,29 +1,46 @@
 #!/usr/bin/python
 
-import argparse, sys
+import argparse
+import sys
+
 
 # Exception for a word that is too large
 class EncoderDoubleWordTooLargeError(Exception):
+
     def __init__(self, value):
-        print "The value %s is too large for a signed double word. It must be less than 4,294,967,295" % str(value)
+        print "The value %s is too large for a signed double word." + \
+            " It must be less than 4,294,967,295" % str(value)
+
 
 # Exception for a word that is too small
 class EncoderDoubleWordTooSmallError(Exception):
+
     def __init__(self, value):
-        print "The value %s is too small for an unsigned double word.  It must be larger than -2,147,483,648" % str(value)
+        print "The value %s is too small for an unsigned double word.  " + \
+            "It must be larger than -2,147,483,648" % str(value)
+
 
 class MissingNibbleError(Exception):
+
     def __init__(self, byte_string):
-        print "Something may have gone wrong here.  It seems that you may be missing a nibble. The byte string is of length %s." % str(len(byte_string))
-        print "String is %s." % byte_string
+        print "Something may have gone wrong here.  It seems that you " + \
+            "may be missing a nibble. The byte string is of length %d." + \
+            "  The string is %s" % (len(byte_string), byte_string)
+
 
 class UnableToFindOperandsError(Exception):
+
     def __init__(self, byte_string):
-        print "We tried but we were unable to find a set of workable bytes for the value %s given the set of good bytes." % byte_string
+        print "We tried but we were unable to find a set of workable" + \
+            " bytes for the value %s given the set " + \
+            "of good bytes." % byte_string
+
 
 class InvalidResultError(Exception):
     def __init__(self, result, expected_result, target_word):
-        print "Our math borked.  We expected %d but got %d for target word %s." % (result, expected_result, target_word)
+        print "Our math borked.  We expected %d but got %d " + \
+            "for target word %s." % (result, expected_result, target_word)
+
 
 class EncoderInstructions:
     nop_op_code = '90'
@@ -101,6 +118,7 @@ class EncoderDoubleWord:
         # would be convenient to use since it has the manipulation methods
         return EncoderDoubleWordTarget(target_answer)
 
+
 # The EncoderDoubleWordReverse encapsulates the target bytes
 # for the calculation.  As an extension of the EncoderDoubleWord class, the
 # EncoderDoubleWordTarget contains the same convenient manipulation methods
@@ -120,8 +138,6 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
         self.operand_three = []
 
     def check(self, x, y, target, carry=0):
-        # print "Checking x: %s and y: %s against target %s with carry %s" % (x, y, target, carry)
-        # print "Checking x: %s and y: %s against target %s with carry %s" % (str(int(x, 16)), str(int(y, 16)), str(int(target,16)), carry)
         if (2 * int(x, 16)) + int(y, 16) + carry == int(target, 16):
             return True
         return False
@@ -143,7 +159,8 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
             # an integer, add 256, and convert it back to a string
             # representation of the byte.
             elif carry > 0:
-                target_byte = "{:02x}".format(int(self.get_byte_array()[i], 16) + 256)
+                target_byte = "{:02x}".format(
+                                int(self.get_byte_array()[i], 16) + 256)
 
             for x in range(0, len(goodbytes_array)):
                 for y in range(0, len(goodbytes_array)):
@@ -152,8 +169,8 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
                     # result arrays.  It's possible multiple combinations will
                     # work, but we just need to capture the first working set.
                     if self.check(goodbytes_array[x],
-                                    goodbytes_array[y],
-                                    target_byte, carry) and not found:
+                                  goodbytes_array[y],
+                                  target_byte, carry) and not found:
                         self.operand_one.insert(0, goodbytes_array[x])
                         self.operand_two.insert(0, goodbytes_array[x])
                         self.operand_three.insert(0, goodbytes_array[y])
@@ -190,12 +207,14 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
 
     def verify_result(self):
 
-        test_sum = self.get_operand_one().get_base_ten() + self.get_operand_two().get_base_ten() + self.get_operand_three().get_base_ten()
+        test_sum = self.get_operand_one().get_base_ten() +
+                self.get_operand_two().get_base_ten() +
+                self.get_operand_three().get_base_ten()
 
         if test_sum != self.get_base_ten():
             raise InvalidResultError(test_sum,
-                                self.get_base_ten(),
-                                self.get_all_digits_base_sixteen(pretty=True))
+                                     self.get_base_ten(),
+                                     self.get_all_digits_base_sixteen(pretty=True))
 
 
 class EncoderParser:
@@ -206,9 +225,9 @@ class EncoderParser:
     # Remove extraneous input characters.  This method doesn't need to be
     # called directly.  Happens during the "parse".
     def clean(self):
-        clean_byte_string = self.input_string.replace('\r','').replace('\n','')
-        clean_byte_string = clean_byte_string.replace(' ','')
-        clean_byte_string = clean_byte_string.replace('\\','')
+        clean_byte_string = self.input_string.replace('\r', '').replace('\n', '')
+        clean_byte_string = clean_byte_string.replace(' ', '')
+        clean_byte_string = clean_byte_string.replace('\\', '')
 
         # Check if we are missing a nibble.
         if len(clean_byte_string) % 2 > 0:
@@ -227,6 +246,7 @@ class EncoderParser:
             if "{:02x}".format(i) not in self.get_byte_array():
                 inverted_byte_array.append("{:02x}".format(i))
         return inverted_byte_array
+
 
 class EncoderInputParser(EncoderParser):
 
@@ -255,6 +275,7 @@ class EncoderInputParser(EncoderParser):
             words.append(EncoderDoubleWord("0x"+clean_byte_string[i:i+8]))
 
         return words
+
 
 class SubtractionEncoder:
 
@@ -293,7 +314,7 @@ class SubtractionEncoder:
         # Second, we will organize the input to array of EncoderDoubleWord's
         self.words = EncoderInputParser(self.inbytes).parse_words()
         self.words_reverse = self.words[::-1]
-        for i in range(0,len(self.words_reverse)):
+        for i in range(0, len(self.words_reverse)):
             substraction_target = self.words_reverse[i].get_subtraction_target()
             substraction_target.calculate(self.goodbytes_array)
             substraction_target.verify_result()
@@ -319,7 +340,7 @@ def main():
                               default='var')
     parser.add_argument('--format',
                               help='The output format',
-                              choices=['asm','raw','python'],
+                              choices=['asm', 'raw', 'python'],
                               default='python')
 
     args = parser.parse_args()
@@ -329,7 +350,7 @@ def main():
     substraction_encoder.process()
 
 if __name__ == "__main__":
-   print 'The encoder of last resort when all others fail...'
-   print 'At the moment, this is only for x86 instruction set.'
-   print '@kevensen'
-   main()
+    print 'The encoder of last resort when all others fail...'
+    print 'At the moment, this is only for x86 instruction set.'
+    print '@kevensen'
+    main()
