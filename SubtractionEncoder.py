@@ -44,11 +44,22 @@ class InvalidResultError(Exception):
 
 class EncoderInstructions:
     nop_op_code = '90'
-    sub_op_code = '2d'
+    sub_eax_op_code = '2d'
     push_esp_op_code = '54'
     pop_esp_op_code = '5c'
     push_eax_op_code = '50'
     pop_eax_op_code = '58'
+    zero_out_eax_1_op_code = '254A4D4E55'
+    zero_out_eax_2_op_code = '253532312A'
+
+    nop = 'NOP'
+    sub_eax = 'SUB EAX,'
+    push_esp = 'PUSH ESP'
+    pop_esp = 'POP ESP'
+    push_eax = 'PUSH EAX'
+    pop_eax = 'POP EAX'
+    zero_out_eax_1 = 'AND EAX,554E4D4A'
+    zero_out_eax_2 = 'AND EAX,2A313235'
 
 
 # Encapsulation of the double word under operation.  This is a value between
@@ -207,14 +218,15 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
 
     def verify_result(self):
 
-        test_sum = self.get_operand_one().get_base_ten() +
-                self.get_operand_two().get_base_ten() +
+        test_sum = self.get_operand_one().get_base_ten() + \
+                self.get_operand_two().get_base_ten() + \
                 self.get_operand_three().get_base_ten()
 
         if test_sum != self.get_base_ten():
             raise InvalidResultError(test_sum,
                                      self.get_base_ten(),
-                                     self.get_all_digits_base_sixteen(pretty=True))
+                                     self.get_all_digits_base_sixteen(
+                                                    pretty=True))
 
 
 class EncoderParser:
@@ -225,7 +237,8 @@ class EncoderParser:
     # Remove extraneous input characters.  This method doesn't need to be
     # called directly.  Happens during the "parse".
     def clean(self):
-        clean_byte_string = self.input_string.replace('\r', '').replace('\n', '')
+        clean_byte_string = self.input_string.replace('\r', '')
+        clean_byte_string = clean_byte_string.replace('\n', '')
         clean_byte_string = clean_byte_string.replace(' ', '')
         clean_byte_string = clean_byte_string.replace('\\', '')
 
@@ -237,7 +250,8 @@ class EncoderParser:
     def get_byte_array(self):
         self.clean()
         n = 2
-        return [self.input_string[i:i+n] for i in range(0, len(self.input_string), n)]
+        return [self.input_string[i:i+n]
+                for i in range(0, len(self.input_string), n)]
 
     def get_inverted_byte_array(self):
         self.clean()
@@ -258,7 +272,8 @@ class EncoderInputParser(EncoderParser):
     # Happens during the "parse".
     def pad(self):
         while ((len(self.input_string)) / 2) % 4 > 0:
-            self.input_string = self.input_string + EncoderInstructions.nop_op_code
+            self.input_string = self.input_string
+            + EncoderInstructions.nop_op_code
         return self.input_string
 
     # Cleans, pads, and generates a list of EncoderDoubleWord objects
@@ -290,7 +305,7 @@ class SubtractionEncoder:
     words_reverse = []
 
     def __init__(self, inputbytes, goodbytes=None, badbytes=None,
-                    output_format='python', variable_name='var'):
+                 output_format='python', variable_name='var'):
 
         self.inbytes = inputbytes
         self.badbytes = badbytes
@@ -302,51 +317,73 @@ class SubtractionEncoder:
         self.goodbytes_array = []
         self.badbytes_array = []
 
-
     def process(self):
         # First, let's get an array of good bytes.
         if self.goodbytes is not None:
-            self.goodbytes_array = EncoderParser(self.goodbytes).get_byte_array()
+            self.goodbytes_array =
+            EncoderParser(self.goodbytes).get_byte_array()
         elif self.badbytes is not None:
             self.badbytes = EncoderParser(self.badbytes).clean()
-            self.goodbytes_array = EncoderParser(self.badbytes).get_inverted_byte_array()
+            self.goodbytes_array =
+            EncoderParser(self.badbytes).get_inverted_byte_array()
 
         # Second, we will organize the input to array of EncoderDoubleWord's
         self.words = EncoderInputParser(self.inbytes).parse_words()
         self.words_reverse = self.words[::-1]
-        for i in range(0, len(self.words_reverse)):
-            substraction_target = self.words_reverse[i].get_subtraction_target()
-            substraction_target.calculate(self.goodbytes_array)
-            substraction_target.verify_result()
-            print substraction_target.get_operand_one().get_all_digits_base_sixteen(pretty=True)
-            print substraction_target.get_operand_two().get_all_digits_base_sixteen(pretty=True)
-            print substraction_target.get_operand_three().get_all_digits_base_sixteen(pretty=True)
+        self.process_asm()
 
+    def process_asm(self):
+        print EncoderInstructions.push_esp
+        print EncoderInstructions.pop_eax
+        for i in range(0, len(self.words_reverse)):
+            # Print the zero out EAX instructions
+            print EncoderInstructions.zero_out_eax_1
+            print EncoderInstructions.zero_out_eax_2
+            # Let's calcualte the operands
+            substraction_target =
+            self.words_reverse[i].get_subtraction_target()
+            substraction_target.calculate(self.goodbytes_array)
+            # We'll do a quick sanity check
+            substraction_target.verify_result()
+            # Assign the operands to objects for readability
+            operand_one = substraction_target.get_operand_one()
+            operand_two = substraction_target.get_operand_two()
+            operand_three = substraction_target.get_operand_three()
+            # Print the instructions
+            print EncoderInstructions.sub_eax
+            +  operand_one.get_all_digits_base_sixteen(pretty=True)
+            print EncoderInstructions.sub_eax
+            + operand_two.get_all_digits_base_sixteen(pretty=True)
+            print EncoderInstructions.sub_eax
+            + operand_three.get_all_digits_base_sixteen(pretty=True)
+            # Print out the instruction to push to the stack
+            print EncoderInstructions.push_eax
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Encode instructions using the SubtractionEncoder')
+    parser = argparse.ArgumentParser(description='Encode instructions' +
+                                     ' using the SubtractionEncoder')
 
     parser.add_argument('--input',
                         help='The string of input bytes',
                         required=True)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--goodbytes',
-                        help='The string of allowed bytes')
+                       help='The string of allowed bytes')
     group.add_argument('--badbytes',
-                        help='The string of disallowed bytes')
+                       help='The string of disallowed bytes')
     parser.add_argument('--variablename',
-                              help='The name of the variable to output',
-                              default='var')
+                        help='The name of the variable to output',
+                        default='var')
     parser.add_argument('--format',
-                              help='The output format',
-                              choices=['asm', 'raw', 'python'],
-                              default='python')
+                        help='The output format',
+                        choices=['asm', 'raw', 'python'],
+                        default='python')
 
     args = parser.parse_args()
     substraction_encoder = SubtractionEncoder(args.input, args.goodbytes,
-                                            args.badbytes, args.format,
-                                            args.variablename)
+                                              args.badbytes, args.format,
+                                              args.variablename)
     substraction_encoder.process()
 
 if __name__ == "__main__":
