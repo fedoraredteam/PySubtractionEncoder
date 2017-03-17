@@ -320,12 +320,10 @@ class SubtractionEncoder:
     def process(self):
         # First, let's get an array of good bytes.
         if self.goodbytes is not None:
-            self.goodbytes_array =
-            EncoderParser(self.goodbytes).get_byte_array()
+            self.goodbytes_array = EncoderParser(self.goodbytes).get_byte_array()
         elif self.badbytes is not None:
             self.badbytes = EncoderParser(self.badbytes).clean()
-            self.goodbytes_array =
-            EncoderParser(self.badbytes).get_inverted_byte_array()
+            self.goodbytes_array = EncoderParser(self.badbytes).get_inverted_byte_array()
 
         # Second, we will organize the input to array of EncoderDoubleWord's
         self.words = EncoderInputParser(self.inbytes).parse_words()
@@ -340,8 +338,7 @@ class SubtractionEncoder:
             print EncoderInstructions.zero_out_eax_1
             print EncoderInstructions.zero_out_eax_2
             # Let's calcualte the operands
-            substraction_target =
-            self.words_reverse[i].get_subtraction_target()
+            substraction_target = self.words_reverse[i].get_subtraction_target()
             substraction_target.calculate(self.goodbytes_array)
             # We'll do a quick sanity check
             substraction_target.verify_result()
@@ -350,12 +347,9 @@ class SubtractionEncoder:
             operand_two = substraction_target.get_operand_two()
             operand_three = substraction_target.get_operand_three()
             # Print the instructions
-            print EncoderInstructions.sub_eax
-            +  operand_one.get_all_digits_base_sixteen(pretty=True)
-            print EncoderInstructions.sub_eax
-            + operand_two.get_all_digits_base_sixteen(pretty=True)
-            print EncoderInstructions.sub_eax
-            + operand_three.get_all_digits_base_sixteen(pretty=True)
+            print EncoderInstructions.sub_eax + operand_one.get_all_digits_base_sixteen(pretty=True)
+            print EncoderInstructions.sub_eax + operand_two.get_all_digits_base_sixteen(pretty=True)
+            print EncoderInstructions.sub_eax + operand_three.get_all_digits_base_sixteen(pretty=True)
             # Print out the instruction to push to the stack
             print EncoderInstructions.push_eax
 
