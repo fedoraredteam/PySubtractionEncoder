@@ -37,9 +37,15 @@ class UnableToFindOperandsError(Exception):
 
 
 class InvalidResultError(Exception):
-    def __init__(self, result, expected_result, target_word):
-        print "Our math borked.  We expected %d but got %d " + \
-            "for target word %s." % (result, expected_result, target_word)
+    def __init__(self, result, expected_result, target_word,
+                 operand_one, operand_two, operand_three):
+        print result
+        print expected_result
+        print target_word
+        print "Our math borked.  We expected %d but got %d for target word %s." % (int(result), int(expected_result), target_word)
+        print "Operand One: %s" % operand_one
+        print "Operand Two: %s" % operand_two
+        print "Operand Three: %s" % operand_three
 
 
 class EncoderInstructions:
@@ -52,14 +58,14 @@ class EncoderInstructions:
     zero_out_eax_1_op_code = '254A4D4E55'
     zero_out_eax_2_op_code = '253532312A'
 
-    nop = 'NOP'
-    sub_eax = 'SUB EAX,'
-    push_esp = 'PUSH ESP'
-    pop_esp = 'POP ESP'
-    push_eax = 'PUSH EAX'
-    pop_eax = 'POP EAX'
-    zero_out_eax_1 = 'AND EAX,554E4D4A'
-    zero_out_eax_2 = 'AND EAX,2A313235'
+    nop = '  NOP'
+    sub_eax = '  SUB EAX,'
+    push_esp = '  PUSH ESP'
+    pop_esp = '  POP ESP'
+    push_eax = '  PUSH EAX'
+    pop_eax = '  POP EAX'
+    zero_out_eax_1 = '  AND EAX,0x554E4D4A'
+    zero_out_eax_2 = '  AND EAX,0x2A313235'
 
 
 # Encapsulation of the double word under operation.  This is a value between
@@ -157,21 +163,34 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
         # Start at the LSB and work towards the MSB
         i = 3
         found = False
-        carry = 0
+        # The carry list will hold the carry for each byte.  Eventhough this
+        # is a four byte, double word, there are five columns.  The zero column
+        # column handles any overflow
+        #
+        # carry[0] carry[1]       carry[2]       carry[3]       carry[4]
+        #          operand_one[0] operand_one[1] operand_one[2] operand_one[3]
+        #   +      operand_two[0] operand_two[1] operand_two[2] operand_two[3]
+        #   +      operand_thr[0] operand_thr[1] operand_thr[2] operand_thr[3]
+        # --------------------------------------------------------------------
+        #          byte_array[0]  byte_array[1]  byte_array[2]  byte_array[3]
+
+        carry = [0,0,0,0,0]
 
         while(i > -1):
             # If this is the first time dealing with this byte,
-            # the carry will be zero.
-            if carry == 0:
+            # the carry on the next MSB will be zero.
+            if carry[i] == 0:
                 target_byte = self.get_byte_array()[i]
             # However, if this is the second or third (unlikely)
             # time we are dealing with the byte, the carry will have
             # been incremented.  Therefore we will convert the byte to
-            # an integer, add 256, and convert it back to a string
-            # representation of the byte.
-            elif carry > 0:
-                target_byte = "{:02x}".format(
-                                int(self.get_byte_array()[i], 16) + 256)
+            # an integer, add 256 (times the carry), and convert
+            # it back to a string representation of the byte.
+            elif carry[i] > 0:
+                    target_byte = "{:02x}".format(
+                                  int(self.get_byte_array()[i], 16)
+                                  + (256 * carry[i]))
+
 
             for x in range(0, len(goodbytes_array)):
                 for y in range(0, len(goodbytes_array)):
@@ -180,32 +199,30 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
                     # result arrays.  It's possible multiple combinations will
                     # work, but we just need to capture the first working set.
                     if self.check(goodbytes_array[x],
-                                  goodbytes_array[y],
-                                  target_byte, carry) and not found:
+                                goodbytes_array[y],
+                                target_byte, carry[i+1]) and not found:
                         self.operand_one.insert(0, goodbytes_array[x])
                         self.operand_two.insert(0, goodbytes_array[x])
                         self.operand_three.insert(0, goodbytes_array[y])
                         found = True
-                        carry = 0
                     # Otherwise, just run out the loops.  Yes, this is silly
                     # but putting this here keeps me sane.
                     else:
                         pass
-
             # If we found a set, we will move to the next MSB
             if found:
                 i = i - 1
                 found = False
-                carry = 0
             # Otherwise, we need to try again, incrementing the carry
             elif not found:
-                carry = carry + 1
+                carry[i] = carry[i] + 1
 
             # The largest value a set of three bytes could sum is 0x2FD (765)
             # Therefore, if we haven't found a set of three values by now, we
             # won't.  Therefore, throw in the towl.
-            if carry > 2:
+            if carry[i] > 2:
                 raise UnableToFindOperandsError
+
 
     def get_operand_one(self):
         return EncoderDoubleWord('0x'+''.join(self.operand_one))
@@ -222,11 +239,20 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
                 self.get_operand_two().get_base_ten() + \
                 self.get_operand_three().get_base_ten()
 
+        # If test_sum is > 0xFFFFFFFF (4294967295), we'll go out on a limb
+        # and assume it's due to overflow.  We will then subtract
+        # 0x100000000 as necessary.
+        while test_sum > 4294967296:
+            test_sum = test_sum - 4294967296
+
         if test_sum != self.get_base_ten():
             raise InvalidResultError(test_sum,
                                      self.get_base_ten(),
                                      self.get_all_digits_base_sixteen(
-                                                    pretty=True))
+                                                    pretty=True),
+                                     self.get_operand_one().get_all_digits_base_sixteen(pretty=True),
+                                     self.get_operand_two().get_all_digits_base_sixteen(pretty=True),
+                                     self.get_operand_three().get_all_digits_base_sixteen(pretty=True))
 
 
 class EncoderParser:
@@ -272,8 +298,7 @@ class EncoderInputParser(EncoderParser):
     # Happens during the "parse".
     def pad(self):
         while ((len(self.input_string)) / 2) % 4 > 0:
-            self.input_string = self.input_string
-            + EncoderInstructions.nop_op_code
+            self.input_string = self.input_string + EncoderInstructions.nop_op_code
         return self.input_string
 
     # Cleans, pads, and generates a list of EncoderDoubleWord objects
@@ -331,6 +356,9 @@ class SubtractionEncoder:
         self.process_asm()
 
     def process_asm(self):
+        print '[SECTION .text]'
+        print 'global _start'
+        print '_start:'
         print EncoderInstructions.push_esp
         print EncoderInstructions.pop_eax
         for i in range(0, len(self.words_reverse)):
