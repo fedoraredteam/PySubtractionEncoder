@@ -14,8 +14,16 @@ class EncoderDoubleWordTooSmallError(Exception):
 
 class MissingNibbleError(Exception):
     def __init__(self, byte_string):
-        print "Something may have gone wrong here.  It seems that you may be missing a nibble. The byte string is of length %s.\n" % str(len(byte_string))
+        print "Something may have gone wrong here.  It seems that you may be missing a nibble. The byte string is of length %s." % str(len(byte_string))
         print "String is %s." % byte_string
+
+class UnableToFindOperandsError(Exception):
+    def __init__(self, byte_string):
+        print "We tried but we were unable to find a set of workable bytes for the value %s given the set of good bytes." % byte_string
+
+class InvalidResultError(Exception):
+    def __init__(self, result, expected_result, target_word):
+        print "Our math borked.  We expected %d but got %d for target word %s." % (result, expected_result, target_word)
 
 class EncoderInstructions:
     nop_op_code = '90'
@@ -77,6 +85,7 @@ class EncoderDoubleWord:
     def get_byte_array_reverse(self):
         return self.get_byte_array()[::-1]
 
+    # Returns an EncoderDoubleWord object
     def get_subtraction_target(self):
         # First get the reversed byte array.
         reverse_byte_array = self.get_byte_array_reverse()
@@ -90,12 +99,104 @@ class EncoderDoubleWord:
         target_answer = 4294967295 - reverse_byte_as_int + 1
         # Response is another EncoderDoubleWord object.  I figured this
         # would be convenient to use since it has the manipulation methods
-        return EncoderDoubleWord(target_answer)
+        return EncoderDoubleWordTarget(target_answer)
 
-class OperandBuilder:
+# The EncoderDoubleWordReverse encapsulates the target bytes
+# for the calculation.  As an extension of the EncoderDoubleWord class, the
+# EncoderDoubleWordTarget contains the same convenient manipulation methods
+# as well as the methods to obtain the three operands.  These three operands,
+# when added together, will equal the double word target.
+class EncoderDoubleWordTarget(EncoderDoubleWord):
 
-    def __init__(self, encoder_double_word):
-        self.encoder_double_word = encoder_double_word
+    operand_one = []
+    operand_two = []
+    operand_three = []
+
+    def __init__(self, value):
+        # TODO: Need to do a call to super
+        self.value = value
+        self.operand_one = []
+        self.operand_two = []
+        self.operand_three = []
+
+    def check(self, x, y, target, carry=0):
+        # print "Checking x: %s and y: %s against target %s with carry %s" % (x, y, target, carry)
+        # print "Checking x: %s and y: %s against target %s with carry %s" % (str(int(x, 16)), str(int(y, 16)), str(int(target,16)), carry)
+        if (2 * int(x, 16)) + int(y, 16) + carry == int(target, 16):
+            return True
+        return False
+
+    def calculate(self, goodbytes_array):
+        # Start at the LSB and work towards the MSB
+        i = 3
+        found = False
+        carry = 0
+
+        while(i > -1):
+            # If this is the first time dealing with this byte,
+            # the carry will be zero.
+            if carry == 0:
+                target_byte = self.get_byte_array()[i]
+            # However, if this is the second or third (unlikely)
+            # time we are dealing with the byte, the carry will have
+            # been incremented.  Therefore we will convert the byte to
+            # an integer, add 256, and convert it back to a string
+            # representation of the byte.
+            elif carry > 0:
+                target_byte = "{:02x}".format(int(self.get_byte_array()[i], 16) + 256)
+
+            for x in range(0, len(goodbytes_array)):
+                for y in range(0, len(goodbytes_array)):
+                    # If we have found a workable set of values and haven't
+                    # previously found a set, we will add these values to the
+                    # result arrays.  It's possible multiple combinations will
+                    # work, but we just need to capture the first working set.
+                    if self.check(goodbytes_array[x],
+                                    goodbytes_array[y],
+                                    target_byte, carry) and not found:
+                        self.operand_one.insert(0, goodbytes_array[x])
+                        self.operand_two.insert(0, goodbytes_array[x])
+                        self.operand_three.insert(0, goodbytes_array[y])
+                        found = True
+                        carry = 0
+                    # Otherwise, just run out the loops.  Yes, this is silly
+                    # but putting this here keeps me sane.
+                    else:
+                        pass
+
+            # If we found a set, we will move to the next MSB
+            if found:
+                i = i - 1
+                found = False
+                carry = 0
+            # Otherwise, we need to try again, incrementing the carry
+            elif not found:
+                carry = carry + 1
+
+            # The largest value a set of three bytes could sum is 0x2FD (765)
+            # Therefore, if we haven't found a set of three values by now, we
+            # won't.  Therefore, throw in the towl.
+            if carry > 2:
+                raise UnableToFindOperandsError
+
+    def get_operand_one(self):
+        return EncoderDoubleWord('0x'+''.join(self.operand_one))
+
+    def get_operand_two(self):
+        return EncoderDoubleWord('0x'+''.join(self.operand_two))
+
+    def get_operand_three(self):
+        return EncoderDoubleWord('0x'+''.join(self.operand_three))
+
+    def verify_result(self):
+
+        test_sum = self.get_operand_one().get_base_ten() + self.get_operand_two().get_base_ten() + self.get_operand_three().get_base_ten()
+
+        if test_sum != self.get_base_ten():
+            raise InvalidResultError(test_sum,
+                                self.get_base_ten(),
+                                self.get_all_digits_base_sixteen(pretty=True))
+
 
 class EncoderParser:
 
@@ -162,6 +263,10 @@ class SubtractionEncoder:
     goodbytes = ''
     output_format = ''
     variable_name = ''
+    goodbytes_array = []
+    badbytes_array = []
+    words = []
+    words_reverse = []
 
     def __init__(self, inputbytes, goodbytes=None, badbytes=None,
                     output_format='python', variable_name='var'):
@@ -171,6 +276,11 @@ class SubtractionEncoder:
         self.goodbytes = goodbytes
         self.output_format = output_format
         self.variable_name = variable_name
+        self.words = []
+        self.words_reverse = []
+        self.goodbytes_array = []
+        self.badbytes_array = []
+
 
     def process(self):
         # First, let's get an array of good bytes.
@@ -181,24 +291,17 @@ class SubtractionEncoder:
             self.goodbytes_array = EncoderParser(self.badbytes).get_inverted_byte_array()
 
         # Second, we will organize the input to array of EncoderDoubleWord's
-        words = EncoderInputParser(self.inbytes).parse_words()
+        self.words = EncoderInputParser(self.inbytes).parse_words()
+        self.words_reverse = self.words[::-1]
+        for i in range(0,len(self.words_reverse)):
+            substraction_target = self.words_reverse[i].get_subtraction_target()
+            substraction_target.calculate(self.goodbytes_array)
+            substraction_target.verify_result()
+            print substraction_target.get_operand_one().get_all_digits_base_sixteen(pretty=True)
+            print substraction_target.get_operand_two().get_all_digits_base_sixteen(pretty=True)
+            print substraction_target.get_operand_three().get_all_digits_base_sixteen(pretty=True)
 
-        for i in range(0,len(words)):
-            print words[i].get_all_digits_base_sixteen(pretty=True)
 
-        print ""
-
-        # Third, we will reverse the array of words since we need to push them
-        # on to the stack in reverse order.
-        words_reverse = words[::-1]
-        for i in range(0,len(words_reverse)):
-            print words_reverse[i].get_all_digits_base_sixteen(pretty=True)
-
-        print ""
-
-        # Now let's take a look at the target bytes
-        for i in range(0,len(words_reverse)):
-            print words_reverse[i].get_subtraction_target().get_all_digits_base_sixteen(pretty=True)
 
 def main():
     parser = argparse.ArgumentParser(description='Encode instructions using the SubtractionEncoder')
