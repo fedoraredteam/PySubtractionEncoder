@@ -358,10 +358,10 @@ class SubtractionEncoder:
         if self.output_format == 'asm':
             self.process_asm()
         elif self.output_format == 'python':
-            pass
+            self.process_python()
         elif self.output_format == 'raw':
             self.process_raw()
-            pass
+
 
     def get_output_bytes(self):
         byte_list = []
@@ -387,7 +387,6 @@ class SubtractionEncoder:
             byte_list.append(EncoderInstructions.sub_eax_op_code)
             byte_list.extend(operand_three.get_byte_array())
             byte_list.append(EncoderInstructions.push_eax_op_code)
-        byte_list.append('\n')
         return byte_list
 
 
@@ -400,6 +399,32 @@ class SubtractionEncoder:
 
         for i in range(0, len(byte_list)):
             sys.stdout.write(byte_list[i])
+
+        sys.stdout.write('\n')
+        if self.filename is not None:
+            sys.stdout.close()
+            sys.stdout = old_stdout
+
+    def process_python(self):
+        old_stdout = sys.stdout
+        byte_list = self.get_output_bytes()
+        if self.filename is not None:
+            sys.stdout = open(self.filename,'w')
+
+
+        new_byte_list = [byte_list[i:i+16] for i in range(0, len(byte_list), 16)]
+
+        for i in range(0, len(new_byte_list)):
+            if i == 0:
+                sys.stdout.write(self.variable_name
+                                 + ' =  \"\\x'
+                                 + '\\x'.join(new_byte_list[i])
+                                 + '\"\n')
+            else:
+                sys.stdout.write(self.variable_name
+                                 + ' += \"\\x'
+                                 + '\\x'.join(new_byte_list[i])
+                                 + '\"\n')
 
         if self.filename is not None:
             sys.stdout.close()
