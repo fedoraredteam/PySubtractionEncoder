@@ -53,7 +53,9 @@ class EncoderInstructions:
     push_eax_op_code = '50'
     pop_eax_op_code = '58'
     zero_out_eax_1_op_code = '254A4D4E55'
+    zero_out_eax_1_op_code_bytes = ['25','4A','4D','4E','55']
     zero_out_eax_2_op_code = '253532312A'
+    zero_out_eax_2_op_code_bytes = ['25','35','32','31','2A']
 
     nop = '  NOP'
     sub_eax = '  SUB EAX,'
@@ -356,11 +358,53 @@ class SubtractionEncoder:
         if self.output_format == 'asm':
             self.process_asm()
         elif self.output_format == 'python':
-            print 'python'
             pass
         elif self.output_format == 'raw':
-            print 'raw'
+            self.process_raw()
             pass
+
+    def get_output_bytes(self):
+        byte_list = []
+        byte_list.append(EncoderInstructions.push_esp_op_code)
+        byte_list.append(EncoderInstructions.pop_eax_op_code)
+        for i in range(0, len(self.words_reverse)):
+            byte_list.extend(EncoderInstructions.zero_out_eax_1_op_code_bytes)
+            byte_list.extend(EncoderInstructions.zero_out_eax_2_op_code_bytes)
+            # Let's calcualte the operands
+            substraction_target = self.words_reverse[i].get_subtraction_target()
+            substraction_target.calculate(self.goodbytes_array)
+            # We'll do a quick sanity check
+            substraction_target.verify_result()
+            # Assign the operands to objects for readability
+            operand_one = substraction_target.get_operand_one()
+            operand_two = substraction_target.get_operand_two()
+            operand_three = substraction_target.get_operand_three()
+
+            byte_list.append(EncoderInstructions.sub_eax_op_code)
+            byte_list.extend(operand_one.get_byte_array())
+            byte_list.append(EncoderInstructions.sub_eax_op_code)
+            byte_list.extend(operand_two.get_byte_array())
+            byte_list.append(EncoderInstructions.sub_eax_op_code)
+            byte_list.extend(operand_three.get_byte_array())
+            byte_list.append(EncoderInstructions.push_eax_op_code)
+        byte_list.append('\n')
+        return byte_list
+
+
+
+    def process_raw(self):
+        old_stdout = sys.stdout
+        byte_list = self.get_output_bytes()
+        if self.filename is not None:
+            sys.stdout = open(self.filename,'w')
+
+        for i in range(0, len(byte_list)):
+            sys.stdout.write(byte_list[i])
+
+        if self.filename is not None:
+            sys.stdout.close()
+            sys.stdout = old_stdout
+
 
     def process_asm(self):
         old_stdout = sys.stdout
