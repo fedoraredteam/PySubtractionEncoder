@@ -8,44 +8,41 @@ import sys
 class EncoderDoubleWordTooLargeError(Exception):
 
     def __init__(self, value):
-        print "The value %s is too large for a signed double word." + \
-            " It must be less than 4,294,967,295" % str(value)
+        sys.stderr.write("The value %s is too large for a signed double word." + \
+            " It must be less than 4,294,967,295" % str(value))
 
 
 # Exception for a word that is too small
 class EncoderDoubleWordTooSmallError(Exception):
 
     def __init__(self, value):
-        print "The value %s is too small for an unsigned double word.  " + \
-            "It must be larger than -2,147,483,648" % str(value)
+        sys.stderr.write("The value %s is too small for an unsigned double word.  " + \
+            "It must be larger than -2,147,483,648\n" % str(value))
 
 
 class MissingNibbleError(Exception):
 
     def __init__(self, byte_string):
-        print "Something may have gone wrong here.  It seems that you " + \
+        sys.stderr.write("Something may have gone wrong here.  It seems that you " + \
             "may be missing a nibble. The byte string is of length %d." + \
-            "  The string is %s" % (len(byte_string), byte_string)
+            "  The string is %s\n" % (len(byte_string), byte_string))
 
 
 class UnableToFindOperandsError(Exception):
 
     def __init__(self, byte_string):
-        print "We tried but we were unable to find a set of workable" + \
+        sys.stderr.write("We tried but we were unable to find a set of workable" + \
             " bytes for the value %s given the set " + \
-            "of good bytes." % byte_string
+            "of good bytes." % byte_string)
 
 
 class InvalidResultError(Exception):
     def __init__(self, result, expected_result, target_word,
                  operand_one, operand_two, operand_three):
-        print result
-        print expected_result
-        print target_word
-        print "Our math borked.  We expected %d but got %d for target word %s." % (int(result), int(expected_result), target_word)
-        print "Operand One: %s" % operand_one
-        print "Operand Two: %s" % operand_two
-        print "Operand Three: %s" % operand_three
+        sys.stderr.write("Our math borked.  We expected %d but got %d for target word %s.\n" % (int(result), int(expected_result), target_word))
+        sys.stderr.write("Operand One: %s\n" % operand_one)
+        sys.stderr.write("Operand Two: %s\n" % operand_two)
+        sys.stderr.write("Operand Three: %s\n" % operand_three)
 
 
 class EncoderInstructions:
@@ -355,16 +352,21 @@ class SubtractionEncoder:
         self.words_reverse = self.words[::-1]
         self.process_asm()
 
-    def process_asm(self):
-        print '[SECTION .text]'
-        print 'global _start'
-        print '_start:'
-        print EncoderInstructions.push_esp
-        print EncoderInstructions.pop_eax
+    def process_asm(self, filename=''):
+        old_stdout = sys.stdout
+
+        if filename != '':
+            sys.stdout = open(filename,'w')
+
+        sys.stdout.write('[SECTION .text]\n')
+        sys.stdout.write('global _start\n')
+        sys.stdout.write('_start:\n')
+        sys.stdout.write(EncoderInstructions.push_esp+'\n')
+        sys.stdout.write(EncoderInstructions.pop_eax+'\n')
         for i in range(0, len(self.words_reverse)):
             # Print the zero out EAX instructions
-            print EncoderInstructions.zero_out_eax_1
-            print EncoderInstructions.zero_out_eax_2
+            sys.stdout.write(EncoderInstructions.zero_out_eax_1+'\n')
+            sys.stdout.write(EncoderInstructions.zero_out_eax_2+'\n')
             # Let's calcualte the operands
             substraction_target = self.words_reverse[i].get_subtraction_target()
             substraction_target.calculate(self.goodbytes_array)
@@ -375,11 +377,15 @@ class SubtractionEncoder:
             operand_two = substraction_target.get_operand_two()
             operand_three = substraction_target.get_operand_three()
             # Print the instructions
-            print EncoderInstructions.sub_eax + operand_one.get_all_digits_base_sixteen(pretty=True)
-            print EncoderInstructions.sub_eax + operand_two.get_all_digits_base_sixteen(pretty=True)
-            print EncoderInstructions.sub_eax + operand_three.get_all_digits_base_sixteen(pretty=True)
+            sys.stdout.write(EncoderInstructions.sub_eax + operand_one.get_all_digits_base_sixteen(pretty=True)+'\n')
+            sys.stdout.write(EncoderInstructions.sub_eax + operand_two.get_all_digits_base_sixteen(pretty=True) + '\n')
+            sys.stdout.write(EncoderInstructions.sub_eax +                             operand_three.get_all_digits_base_sixteen(pretty=True) + '\n')
             # Print out the instruction to push to the stack
-            print EncoderInstructions.push_eax
+            sys.stdout.write(EncoderInstructions.push_eax)
+
+        if filename != '':
+            sys.stdout.close()
+            sys.stdout = old_stdout
 
 
 def main():
@@ -409,7 +415,7 @@ def main():
     substraction_encoder.process()
 
 if __name__ == "__main__":
-    print 'The encoder of last resort when all others fail...'
-    print 'At the moment, this is only for x86 instruction set.'
-    print '@kevensen'
+    sys.stdout.write('The encoder of last resort when all others fail...\n')
+    sys.stdout.write('At the moment, this is only for x86 instruction set.\n')
+    sys.stdout.write('@kevensen\n')
     main()
