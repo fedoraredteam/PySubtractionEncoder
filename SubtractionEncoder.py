@@ -498,5 +498,6 @@ def main():
 if __name__ == "__main__":
     sys.stdout.write('The encoder of last resort when all others fail...\n')
     sys.stdout.write('At the moment, this is only for x86 instruction set.\n')
+    sys.stdout.write('The ASM output is Intel notation.'
     sys.stdout.write('@kevensen\n')
     main()
