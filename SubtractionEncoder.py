@@ -325,9 +325,10 @@ class SubtractionEncoder:
     badbytes_array = []
     words = []
     words_reverse = []
+    filename = None
 
     def __init__(self, inputbytes, goodbytes=None, badbytes=None,
-                 output_format='python', variable_name='var'):
+                 output_format='python', variable_name='var', filename=None):
 
         self.inbytes = inputbytes
         self.badbytes = badbytes
@@ -338,6 +339,7 @@ class SubtractionEncoder:
         self.words_reverse = []
         self.goodbytes_array = []
         self.badbytes_array = []
+        self.filename = filename
 
     def process(self):
         # First, let's get an array of good bytes.
@@ -350,13 +352,21 @@ class SubtractionEncoder:
         # Second, we will organize the input to array of EncoderDoubleWord's
         self.words = EncoderInputParser(self.inbytes).parse_words()
         self.words_reverse = self.words[::-1]
-        self.process_asm()
 
-    def process_asm(self, filename=''):
+        if self.output_format == 'asm':
+            self.process_asm()
+        elif self.output_format == 'python':
+            print 'python'
+            pass
+        elif self.output_format == 'raw':
+            print 'raw'
+            pass
+
+    def process_asm(self):
         old_stdout = sys.stdout
 
-        if filename != '':
-            sys.stdout = open(filename,'w')
+        if self.filename is not None:
+            sys.stdout = open(self.filename,'w')
 
         sys.stdout.write('[SECTION .text]\n')
         sys.stdout.write('global _start\n')
@@ -381,9 +391,9 @@ class SubtractionEncoder:
             sys.stdout.write(EncoderInstructions.sub_eax + operand_two.get_all_digits_base_sixteen(pretty=True) + '\n')
             sys.stdout.write(EncoderInstructions.sub_eax +                             operand_three.get_all_digits_base_sixteen(pretty=True) + '\n')
             # Print out the instruction to push to the stack
-            sys.stdout.write(EncoderInstructions.push_eax)
+            sys.stdout.write(EncoderInstructions.push_eax + '\n')
 
-        if filename != '':
+        if self.filename is not None:
             sys.stdout.close()
             sys.stdout = old_stdout
 
@@ -407,11 +417,13 @@ def main():
                         help='The output format',
                         choices=['asm', 'raw', 'python'],
                         default='python')
+    parser.add_argument('--filename',
+                        help='The output file name.  Default is STDOUT')
 
     args = parser.parse_args()
     substraction_encoder = SubtractionEncoder(args.input, args.goodbytes,
                                               args.badbytes, args.format,
-                                              args.variablename)
+                                              args.variablename, args.filename)
     substraction_encoder.process()
 
 if __name__ == "__main__":
