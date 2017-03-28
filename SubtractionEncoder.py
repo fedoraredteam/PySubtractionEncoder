@@ -31,9 +31,7 @@ class MissingNibbleError(Exception):
 class UnableToFindOperandsError(Exception):
 
     def __init__(self, byte_string):
-        sys.stderr.write("We tried but we were unable to find a set of workable" + \
-            " bytes for the value %s given the set " + \
-            "of good bytes." % byte_string)
+        sys.stderr.write("We tried but we were unable to find a set of workable bytes for the value %s given the set of good bytes." % str(byte_string))
 
 
 class InvalidResultError(Exception):
@@ -106,6 +104,11 @@ class EncoderDoubleWord:
             return "0x" + self.get_all_digits_base_sixteen()
         return "{:08x}".format(self.value)
 
+    def get_all_digits_base_sixteen_reverse(self, pretty=False):
+        if pretty:
+            return "0x" + self.get_all_digits_base_sixteen_reverse()
+        return ''.join(self.get_byte_array_reverse())
+
     # Return double word as an array of 4 strings (bytes)
     # e.g. ['00','00','00','0a']
     def get_byte_array(self):
@@ -158,9 +161,15 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
             return True
         return False
 
-    def calculate(self, goodbytes_array):
+    def calculate(self, goodbytes_array, debug=False):
         # Start at the LSB and work towards the MSB
         i = 3
+        if debug:
+            sys.stdout.write("=== Starting Calculation on Byte " +
+                            self.get_all_digits_base_sixteen(pretty=True) +
+                            " ===\n")
+            sys.stdout.write("i is " + str(i) + "\n")
+
         found = False
         # The carry list will hold the carry for each byte.  Eventhough this
         # is a four byte, double word, there are five columns.  The zero column
@@ -178,19 +187,19 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
         while(i > -1):
             # If this is the first time dealing with this byte,
             # the carry on the next MSB will be zero.
-            if carry[i] == 0:
+            if carry[i-1] == 0:
                 target_byte = self.get_byte_array()[i]
             # However, if this is the second or third (unlikely)
             # time we are dealing with the byte, the carry will have
             # been incremented.  Therefore we will convert the byte to
             # an integer, add 256 (times the carry), and convert
             # it back to a string representation of the byte.
-            elif carry[i] > 0:
+            elif carry[i-1] > 0:
                     target_byte = "{:02x}".format(
                                   int(self.get_byte_array()[i], 16)
-                                  + (256 * carry[i]))
-
-
+                                  + (256 * carry[i-1]))
+            if debug:
+                sys.stdout.write("The target byte is " + target_byte + "\n")
             for x in range(0, len(goodbytes_array)):
                 for y in range(0, len(goodbytes_array)):
                     # If we have found a workable set of values and haven't
@@ -199,29 +208,45 @@ class EncoderDoubleWordTarget(EncoderDoubleWord):
                     # work, but we just need to capture the first working set.
                     if self.check(goodbytes_array[x],
                                 goodbytes_array[y],
-                                target_byte, carry[i+1]) and not found:
+                                target_byte, carry[i]) and not found:
                         self.operand_one.insert(0, goodbytes_array[x])
                         self.operand_two.insert(0, goodbytes_array[x])
                         self.operand_three.insert(0, goodbytes_array[y])
+                        if debug:
+                            sys.stdout.write("Op 1: " + goodbytes_array[x]+"\n")
+                            sys.stdout.write("Op 2: " + goodbytes_array[x]+"\n")
+                            sys.stdout.write("Op 3: " + goodbytes_array[y]+"\n")
+
                         found = True
                     # Otherwise, just run out the loops.  Yes, this is silly
                     # but putting this here keeps me sane.
                     else:
                         pass
+            if debug:
+                sys.stdout.write("Found: " + str(found)+"\n")
             # If we found a set, we will move to the next MSB
             if found:
                 i = i - 1
                 found = False
             # Otherwise, we need to try again, incrementing the carry
             elif not found:
-                carry[i] = carry[i] + 1
+                if debug:
+                     sys.stdout.write("Not found, adding a carry to column: " + str(i-1) +"\n")
+                carry[i-1] = carry[i-1] + 1
 
             # The largest value a set of three bytes could sum is 0x2FD (765)
             # Therefore, if we haven't found a set of three values by now, we
             # won't.  Therefore, throw in the towl.
-            if carry[i] > 2:
-                raise UnableToFindOperandsError
+            if carry[i-1] > 2:
+                print target_byte
+                raise UnableToFindOperandsError(''.join(target_byte))
 
+            if debug:
+                sys.stdout.write("i is now " + str(i) +"\n")
+        if debug:
+            sys.stdout.write("=== DONE WITH TARGET WORD " +
+            self.get_all_digits_base_sixteen(pretty=True) +
+            " ===\n")
 
     def get_operand_one(self):
         return EncoderDoubleWord('0x'+''.join(self.operand_one))
@@ -343,7 +368,7 @@ class SubtractionEncoder:
         self.badbytes_array = []
         self.filename = filename
 
-    def process(self):
+    def process(self, debug=False):
         # First, let's get an array of good bytes.
         if self.goodbytes is not None:
             self.goodbytes_array = EncoderParser(self.goodbytes).get_byte_array()
@@ -356,14 +381,14 @@ class SubtractionEncoder:
         self.words_reverse = self.words[::-1]
 
         if self.output_format == 'asm':
-            self.process_asm()
+            self.process_asm(debug)
         elif self.output_format == 'python':
-            self.process_python()
+            self.process_python(debug)
         elif self.output_format == 'raw':
-            self.process_raw()
+            self.process_raw(debug)
 
 
-    def get_output_bytes(self):
+    def get_output_bytes(self, debug=False):
         byte_list = []
         byte_list.append(EncoderInstructions.push_esp_op_code)
         byte_list.append(EncoderInstructions.pop_eax_op_code)
@@ -372,7 +397,7 @@ class SubtractionEncoder:
             byte_list.extend(EncoderInstructions.zero_out_eax_2_op_code_bytes)
             # Let's calcualte the operands
             substraction_target = self.words_reverse[i].get_subtraction_target()
-            substraction_target.calculate(self.goodbytes_array)
+            substraction_target.calculate(self.goodbytes_array, debug)
             # We'll do a quick sanity check
             substraction_target.verify_result()
             # Assign the operands to objects for readability
@@ -381,19 +406,19 @@ class SubtractionEncoder:
             operand_three = substraction_target.get_operand_three()
 
             byte_list.append(EncoderInstructions.sub_eax_op_code)
-            byte_list.extend(operand_one.get_byte_array())
+            byte_list.extend(operand_one.get_byte_array_reverse())
             byte_list.append(EncoderInstructions.sub_eax_op_code)
-            byte_list.extend(operand_two.get_byte_array())
+            byte_list.extend(operand_two.get_byte_array_reverse())
             byte_list.append(EncoderInstructions.sub_eax_op_code)
-            byte_list.extend(operand_three.get_byte_array())
+            byte_list.extend(operand_three.get_byte_array_reverse())
             byte_list.append(EncoderInstructions.push_eax_op_code)
         return byte_list
 
 
 
-    def process_raw(self):
+    def process_raw(self,debug=False):
         old_stdout = sys.stdout
-        byte_list = self.get_output_bytes()
+        byte_list = self.get_output_bytes(debug)
         if self.filename is not None:
             sys.stdout = open(self.filename,'w')
 
@@ -405,9 +430,9 @@ class SubtractionEncoder:
             sys.stdout.close()
             sys.stdout = old_stdout
 
-    def process_python(self):
+    def process_python(self,debug=False):
         old_stdout = sys.stdout
-        byte_list = self.get_output_bytes()
+        byte_list = self.get_output_bytes(debug)
         if self.filename is not None:
             sys.stdout = open(self.filename,'w')
 
@@ -431,7 +456,7 @@ class SubtractionEncoder:
             sys.stdout = old_stdout
 
 
-    def process_asm(self):
+    def process_asm(self, debug=False):
         old_stdout = sys.stdout
 
         if self.filename is not None:
@@ -448,7 +473,7 @@ class SubtractionEncoder:
             sys.stdout.write(EncoderInstructions.zero_out_eax_2+'\n')
             # Let's calcualte the operands
             substraction_target = self.words_reverse[i].get_subtraction_target()
-            substraction_target.calculate(self.goodbytes_array)
+            substraction_target.calculate(self.goodbytes_array,debug)
             # We'll do a quick sanity check
             substraction_target.verify_result()
             # Assign the operands to objects for readability
@@ -488,12 +513,15 @@ def main():
                         default='python')
     parser.add_argument('--filename',
                         help='The output file name.  Default is STDOUT')
+    parser.add_argument('--debug',
+                        help='Show additional output.',
+                        default=False)
 
     args = parser.parse_args()
     substraction_encoder = SubtractionEncoder(args.input, args.goodbytes,
                                               args.badbytes, args.format,
                                               args.variablename, args.filename)
-    substraction_encoder.process()
+    substraction_encoder.process(args.debug)
 
 if __name__ == "__main__":
     sys.stdout.write('The encoder of last resort when all others fail...\n')
